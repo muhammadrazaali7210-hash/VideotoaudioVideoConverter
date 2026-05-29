@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Local Core - Media Processor</title>
+    
+    <script src="coi-serviceworker.js"></script>
+    
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0a0f1d;
+            --container-bg: #111827;
+            --accent-blue: #0ea5e9;
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border-color: #1f2937;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        header h1 {
+            color: var(--accent-blue);
+            margin: 0;
+            font-size: 28px;
+            letter-spacing: 1px;
+        }
+        header p {
+            color: var(--text-muted);
+            margin: 5px 0 0 0;
+            font-size: 14px;
+        }
+        .main-wrapper {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+        .section-card {
+            background-color: var(--container-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .section-title span {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+        .badge-blue { background-color: rgba(14, 165, 233, 0.2); color: var(--accent-blue); }
+        .badge-purple { background-color: rgba(139, 92, 246, 0.2); color: var(--accent-purple); }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .file-input-wrapper {
+            background-color: var(--bg-color);
+            border: 1px dashed #2563eb;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .file-input-wrapper:hover {
+            background-color: rgba(14, 165, 233, 0.03);
+        }
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .file-label-text {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .file-label-text span {
+            color: var(--accent-blue);
+            font-weight: bold;
+        }
+        .action-btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+            margin-top: 10px;
+        }
+        .action-btn:hover { opacity: 0.9; }
+        .btn-purple { background-color: var(--accent-purple); }
+        
+        .status-log {
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--accent-green);
+            white-space: pre-wrap;
+            display: none;
+        }
+        .download-zone {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .download-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--accent-green);
+            padding: 12px;
+            border-radius: 6px;
+            color: var(--text-main);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .download-link:hover { background-color: rgba(16, 185, 129, 0.15); }
+        .download-tag { color: var(--accent-green); font-size: 12px; }
+
+        .gateway-banner {
+            background: linear-gradient(90deg, rgba(14,165,233,0.1) 0%, rgba(139,92,246,0.1) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .gateway-banner p {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+        .gateway-link {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 14px;
+            border: 1px solid var(--accent-blue);
+            padding: 8px 16px;
+            border-radius: 6px;
+            display: inline-block;
+            transition: all 0.2s ease;
+        }
+        .gateway-link:hover {
+            background-color: var(--accent-blue);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>JARVIS Edge Media Hub</h1>
+        <p>Pure Client-Side Processing Panel • 100% Serverless, Sir</p>
+    </header>
+
+    <div class="main-wrapper">
+
+        <div class="gateway-banner">
+            <p>Need to modify asset extensions or transform specific configurations?</p>
+            <a href="https://muhammadrazaali7210-hash.github.io/AliRazaConverter/" target="_blank" class="gateway-link">Launch Ali Raza Converter Portal →</a>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">
+                Muxing Engine <span class="badge-blue">Merge Pipeline</span>
+            </div>
+            <div class="input-group">
+                <label>Input Silent Video File (Any Resolution / Any Format):</label>
+                <div class="file-input-wrapper">
+                    <div class="file-label-text" id="v1Label">Drop raw video node or <span>browse</span></div>
+                    <input type="file" id="videoInput1" accept="video/*" onchange="updateFileLabel('videoInput1', 'v1Label')">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>Input Target Audio File (Any Format / Extension):</label>
+                <div class="file-input-wrapper">
+                    <div class="file-label-text" id="a1Label">Drop audio master track or <span>browse</span></div>
+                    <input type="file" id="audioInput1" accept="audio/*" onchange="updateFileLabel('audioInput1', 'a1Label')">
+                </div>
+            </div>
+            <button class="action-btn" onclick="processMergePipeline()">Execute Original-Res MP4 Sync</button>
+            <div class="status-log" id="log1">> Ready for muxing processing layout, sir...</div>
+            <div class="download-zone" id="downloadZone1"></div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">
+                Demuxing Engine <span class="badge-purple">Extract & Convert Matrix</span>
+            </div>
+            <div class="input-group">
+                <label>Input Master Audio-Video Stream (Any Extension):</label>
+                <div class="file-input-wrapper" style="border-color: #7c3aed;">
+                    <div class="file-label-text" id="v2Label">Drop media stream layout or <span>browse</span></div>
+                    <input type="file" id="mediaInput2" accept="video/*" onchange="updateFileLabel('mediaInput2', 'v2Label')">
+                </div>
+            </div>
+            <button class="action-btn btn-purple" onclick="processSplitPipeline()">Extract Assets (.MP4 & .MP3)</button>
+            <div class="status-log" id="log2" style="color: var(--accent-purple);">> Awaiting separation matrix parameters, sir...</div>
+            <div class="download-zone" id="downloadZone2"></div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        let ffmpegInstance = null;
+
+        function updateFileLabel(inputId, labelId) {
+            const fileInput = document.getElementById(inputId);
+            const label = document.getElementById(labelId);
+            if (fileInput.files.length > 0) {
+                label.innerHTML = `Asset Linked: <strong style="color: #f3f4f6;">${fileInput.files[0].name}</strong>`;
+            }
+        }
+
+        function printLog(logId, message) {
+            const logger = document.getElementById(logId);
+            logger.style.display = "block";
+            logger.innerText = message;
+        }
+
+        async function bootFFmpegCore(logId) {
+            if (ffmpegInstance === null) {
+                printLog(logId, "> Initializing local hardware WebAssembly registers, sir...");
+                ffmpegInstance = createFFmpeg({ log: false });
+                await ffmpegInstance.load();
+            }
+            ffmpegInstance.setProgress(({ ratio }) => {
+                printLog(logId, `> Hardware processing index: ${(ratio * 100).toFixed(1)}% complete, sir.`);
+            });
+        }
+
+        async function processMergePipeline() {
+            const videoFile = document.getElementById('videoInput1').files[0];
+            const audioFile = document.getElementById('audioInput1').files[0];
+            const logId = 'log1';
+            const dlZone = document.getElementById('downloadZone1');
+            
+            if (!videoFile || !audioFile) {
+                printLog(logId, "> Exception Error: Please stage both video and audio assets first, sir.");
+                return;
+            }
+
+            dlZone.innerHTML = "";
+            try {
+                await bootFFmpegCore(logId);
+                printLog(logId, "> Transferring stream streams directly to memory structures...");
+
+                const videoExt = videoFile.name.split('.').pop();
+                const audioExt = audioFile.name.split('.').pop();
+
+                ffmpegInstance.FS('writeFile', `in_vid.${videoExt}`, await fetchFile(videoFile));
+                ffmpegInstance.FS('writeFile', `in_aud.${audioExt}`, await fetchFile(audioFile));
+
+                printLog(logId, "> Executing zero-copy codec stream sync to retain full resolution...");
+                
+                await ffmpegInstance.run(
+                    '-i', `in_vid.${videoExt}`, 
+                    '-i', `in_aud.${audioExt}`, 
+                    '-c:v', 'copy', 
+                    '-c:a', 'aac', 
+                    '-shortest', 
+                    'synchronized_output.mp4'
+                );
+
+                printLog(logId, "> Processing finalized. Rendering local output node link...");
+                const outputData = ffmpegInstance.FS('readFile', 'synchronized_output.mp4');
+                const videoBlob = new Blob([outputData.buffer], { type: 'video/mp4' });
+                const downloadUrl = URL.createObjectURL(videoBlob);
+
+                dlZone.innerHTML = `
+                    <a href="${downloadUrl}" download="Synced_Output.mp4" class="download-link">
+                        <span>📥 Download Master Video</span>
+                        <span class="download-tag">Original Res .MP4</span>
+                    </a>
+                `;
+
+                ffmpegInstance.FS('unlink', `in_vid.${videoExt}`);
+                ffmpegInstance.FS('unlink', `in_aud.${audioExt}`);
+                ffmpegInstance.FS('unlink', 'synchronized_output.mp4');
+
+            } catch (err) {
+                console.error(err);
+                printLog(logId, `> Pipeline Crash Exception: ${err.message}`);
+            }
+        }
+
+        async function processSplitPipeline() {
+            const targetFile = document.getElementById('mediaInput2').files[0];
+            const logId = 'log2';
+            const dlZone = document.getElementById('downloadZone2');
+
+            if (!targetFile) {
+                printLog(logId, "> Exception Error: Please input an active audio-video source element, sir.");
+                return;
+            }
+
+            dlZone.innerHTML = "";
+            try {
+                await bootFFmpegCore(logId);
+                printLog(logId, "> Mapping media data block into local browser space...");
+
+                const inputExt = targetFile.name.split('.').pop();
+                ffmpegInstance.FS('writeFile', `input_source.${inputExt}`, await fetchFile(targetFile));
+
+                printLog(logId, "> Isolating container visual tracks. Keeping matching video code layout...");
+                await ffmpegInstance.run('-i', `input_source.${inputExt}`, '-an', '-c:v', 'copy', 'extracted_video.mp4');
+                const videoBuffer = ffmpegInstance.FS('readFile', 'extracted_video.mp4');
+                const videoBlob = new Blob([videoBuffer.buffer], { type: 'video/mp4' });
+                const videoUrl = URL.createObjectURL(videoBlob);
+
+                printLog(logId, "> Re-encoding audio channel maps directly to 192kbps MP3 framework...");
+                await ffmpegInstance.run('-i', `input_source.${inputExt}`, '-vn', '-c:a', 'libmp3lame', '-q:a', '2', 'extracted_audio.mp3');
+                const audioBuffer = ffmpegInstance.FS('readFile', 'extracted_audio.mp3');
+                const audioBlob = new Blob([audioBuffer.buffer], { type: 'audio/mp3' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                printLog(logId, "> Asset isolation sequencing complete, sir!");
+                
+                dlZone.innerHTML = `
+                    <a href="${videoUrl}" download="Extracted_Video.mp4" class="download-link" style="border-color: var(--accent-purple)">
+                        <span>📥 Download Isolated Video</span>
+                        <span class="download-tag" style="color: var(--accent-purple)">Clean .MP4 Layout</span>
+                    </a>
+                    <a href="${audioUrl}" download="Extracted_Audio.mp3" class="download-link">
+                        <span>🎵 Download Extracted Audio</span>
+                        <span class="download-tag">Original Quality .MP3</span>
+                    </a>
+                `;
+
+                ffmpegInstance.FS('unlink', `input_source.${inputExt}`);
+                ffmpegInstance.FS('unlink', 'extracted_video.mp4');
+                ffmpegInstance.FS('unlink', 'extracted_audio.mp3');
+
+            } catch (err) {
+                console.error(err);
+                printLog(logId, `> Processing Pipeline Exception: ${err.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
